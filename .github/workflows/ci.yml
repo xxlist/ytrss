@@ -4,7 +4,7 @@ on:
   push:
     branches: 
       - main
-    
+      
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -15,18 +15,35 @@ jobs:
         uses: actions/checkout@v4
         with: 
           ref: ${{ github.head_ref }}
-      - name: Instlal yt-dlp
+          
+      - name: Setup yt-dlp
         uses: AnimMouse/setup-yt-dlp@v3
+        
+      - name: Setup yt-dlp YouTube cookies
+        uses: AnimMouse/setup-yt-dlp/cookies@v3
+        with:
+          cookies: ${{ secrets.YOUTUBE_COOKIES }}
+          
       - name: Print yt-dlp version
         run: yt-dlp --version
+        
       - name: Install clojure tools
         uses: DeLaGuardo/setup-clojure@13.4
         with:
           bb: latest
+          
       - name: Print bb version
         run: bb --version
+        
       - name: Run main.bb
         run: bb main.bb
+        
+      - name: Update yt-dlp YouTube cookies
+        uses: AnimMouse/setup-yt-dlp/cookies/update@v3
+        with:
+          cookies_secret_name: YOUTUBE_COOKIES
+          token: ${{ secrets.GH_PAT }}
+          
       - name: Git auto commit and push all changes
         uses: stefanzweifel/git-auto-commit-action@v6
         with: 

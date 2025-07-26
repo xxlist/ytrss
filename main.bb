@@ -6,6 +6,7 @@
 (require '[clojure.java.io :as io])
 (require '[babashka.fs :as fs])
 (require '[babashka.process :refer [shell]])
+(require '[clojure.string :as str])
 
 ;; === Model ===
 
@@ -51,10 +52,12 @@
 (defn channel-entries-audio-urls-download-cmd
   "Generate yt-dlp cmd for downloading [audio-url]s of [ChannelEntry]s"
   [channel-id save-file]
-  (let [template
-        "%(id)s,%(urls)s"]
+  (let [template "%(id)s,%(urls)s"
+        ; sleep-opts "--sleep-requests 1 --retry-sleep linear=1::2"
+        sleep-opts ""]
     (format
-     "yt-dlp --sleep-requests 1 --retry-sleep linear=1::2 -s -f 'ba' --print-to-file '%s' '%s' %s"
+     "yt-dlp %s -s -f 'ba' --print-to-file '%s' '%s' %s"
+     sleep-opts
      template
      save-file
      (str "https://m.youtube.com/channel/" channel-id))))
@@ -133,6 +136,14 @@
 (comment
   (rfc1123-datetime-formatted 1678886400))
 
+(defn replace-and-char
+  "Replace & to &amp;"
+  [s]
+  (str/replace s "&" "&amp;"))
+
+(comment
+  (replace-and-char "https://abc.xyz?foo=1&bar=2&baz=3"))
+
 (defn write-cdata
   "Write [data] wrapped by [CDATA] into [writer]"
   [writer data]
@@ -169,11 +180,9 @@
     (.write "<itunes:duration>")
     (.write (str duration))
     (.write "</itunes:duration>")
-    (.write (format "<itunes:image href=\"%s\"/>" (-> (last cover-images) :url)))
-    (.write (format "<enclosure url=\"%s\" type=\"audio/mpeg\"/>" audio-url))
-    (.write "</item>"))
-
-  nil)
+    (.write (format "<itunes:image href=\"%s\"/>" (-> (last cover-images) :url replace-and-char)))
+    (.write (format "<enclosure url=\"%s\" type=\"audio/mpeg\"/>" (-> audio-url replace-and-char)))
+    (.write "</item>")))
 
 (defn channel-entries->rss
   [writer entries]
@@ -198,16 +207,18 @@
       (.write "<link>")
       (.write url)
       (.write "</link>")
-      (.write (format "<itunes:image href=\"%s\"/>" avatar-url))
+      (.write (format "<itunes:image href=\"%s\"/>" (-> avatar-url replace-and-char)))
       (channel-entries->rss entries)
       (.write "</channel>")
       (.write "</rss>")
       (.flush))
     nil))
 
+;; === Main ===
+
 (defn -main [args]
   (let [channel-id "UC6IYxkyLgsCer80qS8hRbFg"
-        rss-xml-file (str channel-id ".xml")
+        rss-xml-file (str channel-id "/_rss.xml")
         channel (make-channel channel-id)]
     (log/info "[" channel-id "]" "Writing channel as rss xml")
     (channel->rss rss-xml-file channel)))
@@ -215,3 +226,11 @@
 (when (= *file* (System/getProperty "babashka.file"))
   (-main *command-line-args*))
 
+(comment
+  (let [channel-id "UC6IYxkyLgsCer80qS8hRbFg"
+        dir channel-id
+        channel-info-file (str dir "/_channel.json")
+        channel-entries-audio-urls-file  (str dir "/_channel-entries-audio-urls.csv")
+        rss-xml-file (str dir "/_rss.xml")
+        channel (parse-channel channel-info-file channel-entries-audio-urls-file)]
+    (channel->rss rss-xml-file channel)))
